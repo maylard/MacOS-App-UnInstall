@@ -4,12 +4,18 @@ class FileScanner {
     private let fileManager = FileManager.default
 
     func scan(appInfo: AppInfo) async -> [FoundFile] {
+        var appInfo = appInfo
         var results: [FoundFile] = []
         let homeDir = fileManager.homeDirectoryForCurrentUser
         let userLib = homeDir.appendingPathComponent("Library")
         let sysLib = URL(fileURLWithPath: "/Library")
 
-        // --- EXACT MATCH SCANS ---
+        // --- PHASE 1: Scan the app binary for embedded path references ---
+        // This catches things like ~/.gemini/ that don't match standard patterns
+        let discoveredPaths = scanAppBinary(appInfo: appInfo)
+        appInfo.discoveredPaths = discoveredPaths
+
+        // --- PHASE 2: EXACT MATCH SCANS ---
 
         // ~/Library/Containers/{bundleID}
         checkExact(
@@ -60,7 +66,14 @@ class FileScanner {
             category: .preferences, into: &results
         )
 
-        // --- PATTERN MATCH SCANS ---
+        // ~/Library/Application Scripts/{bundleID}
+        checkExact(
+            userLib.appendingPathComponent("Application Scripts")
+                .appendingPathComponent(appInfo.bundleIdentifier),
+            category: .applicationScripts, into: &results
+        )
+
+        // --- PHASE 3: PATTERN MATCH SCANS ---
 
         let patterns = appInfo.searchPatterns
 
@@ -100,6 +113,24 @@ class FileScanner {
             patterns: patterns, category: .crashReports, into: &results
         )
 
+        // ~/Library/Preferences/ (pattern match for helper plists, etc.)
+        scanDirectory(
+            userLib.appendingPathComponent("Preferences"),
+            patterns: [appInfo.bundleIdentifier],
+            category: .preferences, into: &results,
+            skipExact: [
+                "\(appInfo.bundleIdentifier).plist",
+                "\(appInfo.bundleIdentifier).helper.plist"
+            ]
+        )
+
+        // ~/Library/Application Scripts/ (pattern match for related scripts)
+        scanDirectory(
+            userLib.appendingPathComponent("Application Scripts"),
+            patterns: patterns, category: .applicationScripts, into: &results,
+            skipExact: [appInfo.bundleIdentifier]
+        )
+
         // /Library paths (system-wide)
         scanDirectory(
             sysLib.appendingPathComponent("Application Support"),
@@ -117,6 +148,10 @@ class FileScanner {
             sysLib.appendingPathComponent("Preferences"),
             patterns: patterns, category: .preferences, into: &results
         )
+        scanDirectory(
+            sysLib.appendingPathComponent("Caches"),
+            patterns: patterns, category: .caches, into: &results
+        )
 
         // /var/db/receipts/ (only match bundle ID for precision)
         scanDirectory(
@@ -125,8 +160,203 @@ class FileScanner {
             category: .receipts, into: &results
         )
 
+        // --- PHASE 4: HOME DIRECTORY DOT-FOLDER SCANNING ---
+        scanHomeDirDotFolders(appInfo: appInfo, into: &results)
+
+        // --- PHASE 5: BINARY-DISCOVERED PATHS ---
+        checkDiscoveredPaths(discoveredPaths, existingResults: results, into: &results)
+
+        // Deduplicate results by URL
+        var seen = Set<String>()
+        results = results.filter { file in
+            let path = file.url.path
+            if seen.contains(path) { return false }
+            seen.insert(path)
+            return true
+        }
+
         return results
     }
+
+    // MARK: - App Binary String Scanning
+
+    /// Scans the app's main executable binary for embedded path-like strings.
+    /// This is how we discover paths like ~/.gemini/ that don't follow standard patterns.
+    private func scanAppBinary(appInfo: AppInfo) -> [String] {
+        guard let execName = appInfo.executableName ?? Optional(appInfo.bundleName) else {
+            return []
+        }
+
+        let execURL = appInfo.appURL
+            .appendingPathComponent("Contents")
+            .appendingPathComponent("MacOS")
+            .appendingPathComponent(execName)
+
+        guard fileManager.fileExists(atPath: execURL.path) else { return [] }
+
+        // Read the binary and look for path-like strings
+        guard let data = try? Data(contentsOf: execURL) else { return [] }
+
+        var paths: [String] = []
+        let homeDir = fileManager.homeDirectoryForCurrentUser.path
+
+        // Extract ASCII strings from the binary (similar to the `strings` command)
+        let extractedStrings = extractStrings(from: data, minLength: 5)
+
+        for str in extractedStrings {
+            // Look for home directory references
+            if str.hasPrefix("~/") || str.hasPrefix("$HOME/") || str.contains("/.") {
+                let normalized = str
+                    .replacingOccurrences(of: "$HOME", with: "~")
+                    .trimmingCharacters(in: .whitespaces)
+
+                // Only keep paths that look like config/data directories
+                if normalized.hasPrefix("~/.")
+                    && !normalized.contains("*")
+                    && !normalized.contains("{")
+                    && normalized.count < 100 {
+
+                    // Extract just the first path component after ~/
+                    let afterHome = String(normalized.dropFirst(2)) // drop ~/
+                    if let firstSlash = afterHome.firstIndex(of: "/") {
+                        let dirName = String(afterHome[afterHome.startIndex..<firstSlash])
+                        let fullPath = homeDir + "/." + dirName.replacingOccurrences(of: ".", with: "", options: .anchored)
+                        // Normalize: ensure it starts with .
+                        let dotPath = "~/." + dirName.replacingOccurrences(of: ".", with: "", options: .anchored)
+                        if !paths.contains(dotPath) {
+                            paths.append(dotPath)
+                        }
+                    } else {
+                        if !paths.contains(normalized) {
+                            paths.append(normalized)
+                        }
+                    }
+                }
+            }
+
+            // Also look for absolute paths to common config locations
+            if str.hasPrefix("/Users/") && str.contains("/.") {
+                // Extract the dot-folder portion
+                if let dotRange = str.range(of: "/.", options: .backwards) {
+                    let afterDot = str[dotRange.upperBound...]
+                    if let slashIdx = afterDot.firstIndex(of: "/") {
+                        let dirName = String(afterDot[afterDot.startIndex..<slashIdx])
+                        let dotPath = "~/.\(dirName)"
+                        if !paths.contains(dotPath) {
+                            paths.append(dotPath)
+                        }
+                    }
+                }
+            }
+        }
+
+        return paths
+    }
+
+    /// Extract printable ASCII strings from binary data (like the `strings` command)
+    private func extractStrings(from data: Data, minLength: Int) -> [String] {
+        var strings: [String] = []
+        var current = ""
+
+        for byte in data {
+            // Printable ASCII range (space through tilde)
+            if byte >= 0x20 && byte <= 0x7E {
+                current.append(Character(UnicodeScalar(byte)))
+            } else {
+                if current.count >= minLength {
+                    strings.append(current)
+                }
+                current = ""
+            }
+        }
+        if current.count >= minLength {
+            strings.append(current)
+        }
+
+        // Filter to only path-like strings to reduce noise
+        return strings.filter { str in
+            str.contains("/") || str.contains("~")
+        }
+    }
+
+    // MARK: - Home Directory Dot-Folder Scanning
+
+    /// Scans ~/ for hidden dot-folders that match the app name or related identifiers
+    private func scanHomeDirDotFolders(appInfo: AppInfo, into results: inout [FoundFile]) {
+        let homeDir = fileManager.homeDirectoryForCurrentUser
+
+        guard let contents = try? fileManager.contentsOfDirectory(
+            at: homeDir,
+            includingPropertiesForKeys: [.isDirectoryKey],
+            options: []
+        ) else { return }
+
+        let patterns = appInfo.homeDirPatterns
+
+        for item in contents {
+            let name = item.lastPathComponent
+            // Only check dot-folders
+            guard name.hasPrefix(".") else { continue }
+
+            // Strip the leading dot for matching
+            let cleanName = String(name.dropFirst()).lowercased()
+
+            // Check if the folder name matches any of our patterns
+            if patterns.contains(where: { cleanName == $0 || cleanName.contains($0) }) {
+                // Skip common system dot-folders that are too generic
+                let systemFolders: Set<String> = [
+                    ".Trash", ".cache", ".config", ".local", ".ssh",
+                    ".zshrc", ".bash_profile", ".gitconfig", ".npm",
+                    ".cargo", ".rustup"
+                ]
+                guard !systemFolders.contains(name) else { continue }
+
+                let size = calculateSize(at: item)
+                results.append(FoundFile(
+                    url: item,
+                    size: size,
+                    isDirectory: isDirectory(item),
+                    category: .homeDirectory
+                ))
+            }
+        }
+    }
+
+    // MARK: - Binary-Discovered Path Checking
+
+    /// Check paths discovered from binary scanning to see if they actually exist
+    private func checkDiscoveredPaths(_ paths: [String],
+                                      existingResults: [FoundFile],
+                                      into results: inout [FoundFile]) {
+        let homeDir = fileManager.homeDirectoryForCurrentUser.path
+        let existingPaths = Set(existingResults.map(\.url.path))
+
+        for path in paths {
+            let resolvedPath: String
+            if path.hasPrefix("~/") {
+                resolvedPath = homeDir + String(path.dropFirst(1))
+            } else {
+                resolvedPath = path
+            }
+
+            let url = URL(fileURLWithPath: resolvedPath)
+
+            // Skip if we already found this path
+            guard !existingPaths.contains(url.path) else { continue }
+
+            if fileManager.fileExists(atPath: resolvedPath) {
+                let size = calculateSize(at: url)
+                results.append(FoundFile(
+                    url: url,
+                    size: size,
+                    isDirectory: isDirectory(url),
+                    category: .binaryDiscovered
+                ))
+            }
+        }
+    }
+
+    // MARK: - Core Scanning Methods
 
     private func checkExact(_ url: URL, category: FoundFile.FileCategory,
                             into results: inout [FoundFile]) {
@@ -142,7 +372,8 @@ class FileScanner {
 
     private func scanDirectory(_ directory: URL, patterns: [String],
                                category: FoundFile.FileCategory,
-                               into results: inout [FoundFile]) {
+                               into results: inout [FoundFile],
+                               skipExact: [String] = []) {
         guard let contents = try? fileManager.contentsOfDirectory(
             at: directory,
             includingPropertiesForKeys: [.isDirectoryKey],
@@ -151,6 +382,10 @@ class FileScanner {
 
         for item in contents {
             let name = item.lastPathComponent
+
+            // Skip items already found via exact match
+            if skipExact.contains(name) { continue }
+
             if patterns.contains(where: { name.localizedCaseInsensitiveContains($0) }) {
                 let size = calculateSize(at: item)
                 results.append(FoundFile(
@@ -163,6 +398,8 @@ class FileScanner {
         }
     }
 
+    // MARK: - Helpers
+
     private func calculateSize(at url: URL) -> Int64 {
         if !isDirectory(url) {
             let attrs = try? fileManager.attributesOfItem(atPath: url.path)
@@ -173,7 +410,7 @@ class FileScanner {
         guard let enumerator = fileManager.enumerator(
             at: url,
             includingPropertiesForKeys: [.fileSizeKey, .isRegularFileKey],
-            options: [.skipsHiddenFiles]
+            options: []
         ) else { return 0 }
 
         for case let fileURL as URL in enumerator {

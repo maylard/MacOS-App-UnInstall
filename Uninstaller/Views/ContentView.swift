@@ -5,9 +5,10 @@ struct ContentView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            if !viewModel.hasFullDiskAccess {
-                FullDiskAccessPromptView()
-            }
+            FullDiskAccessPromptView(
+                hasFullDiskAccess: $viewModel.hasFullDiskAccess,
+                onRecheck: { viewModel.checkFullDiskAccess() }
+            )
 
             if viewModel.scanResult != nil {
                 FileListView(viewModel: viewModel)

@@ -21,8 +21,11 @@ struct FoundFile: Identifiable {
         case cookies = "Cookies"
         case containers = "Containers"
         case groupContainers = "Group Containers"
+        case applicationScripts = "Application Scripts"
         case receipts = "Receipts"
         case crashReports = "Crash Reports"
+        case homeDirectory = "Home Directory"
+        case binaryDiscovered = "Discovered in App Binary"
         case other = "Other"
     }
 }

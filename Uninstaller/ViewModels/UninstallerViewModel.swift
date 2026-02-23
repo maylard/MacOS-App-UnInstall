@@ -85,7 +85,14 @@ class UninstallerViewModel: ObservableObject {
         scanResult?.files.removeAll { $0.isSelected && succeededSet.contains($0.url) }
 
         if !outcome.failed.isEmpty {
-            errorMessage = "Could not move \(outcome.failed.count) file(s) to Trash. They may require admin privileges."
+            let failedPaths = outcome.failed.map { $0.0.lastPathComponent }.joined(separator: ", ")
+            if !hasFullDiskAccess {
+                errorMessage = "Could not move \(outcome.failed.count) file(s) to Trash (\(failedPaths)). Enable Full Disk Access in System Settings to allow deletion of protected files."
+            } else {
+                errorMessage = "Could not move \(outcome.failed.count) file(s) to Trash (\(failedPaths)). These may require admin privileges — try deleting them manually via Finder or Terminal."
+            }
+        } else {
+            errorMessage = nil
         }
     }
 
@@ -93,8 +100,13 @@ class UninstallerViewModel: ObservableObject {
         let outcome = TrashService.moveToTrash(urls: [file.url])
         if !outcome.succeeded.isEmpty {
             scanResult?.files.removeAll { $0.id == file.id }
+            errorMessage = nil
         } else if let error = outcome.failed.first?.1 {
-            errorMessage = "Could not move to Trash: \(error.localizedDescription)"
+            if !hasFullDiskAccess {
+                errorMessage = "Cannot delete \"\(file.url.lastPathComponent)\": Enable Full Disk Access in System Settings, then try again."
+            } else {
+                errorMessage = "Cannot delete \"\(file.url.lastPathComponent)\": \(error.localizedDescription). Try deleting manually via Finder or Terminal."
+            }
         }
     }
 
