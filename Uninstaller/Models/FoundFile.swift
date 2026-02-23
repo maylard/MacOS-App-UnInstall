@@ -26,6 +26,7 @@ struct FoundFile: Identifiable {
         case crashReports = "Crash Reports"
         case homeDirectory = "Home Directory"
         case binaryDiscovered = "Discovered in App Binary"
+        case communityMapped = "Known App Files"
         case other = "Other"
     }
 }

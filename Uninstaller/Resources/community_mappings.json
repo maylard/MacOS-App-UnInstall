@@ -1,0 +1,89 @@
+{
+  "version": 1,
+  "description": "Community-maintained mappings of apps to non-standard file locations that cannot be discovered automatically. Contributions welcome via pull request.",
+  "mappings": {
+    "com.google.antigravity": {
+      "name": "Antigravity (Google Gemini)",
+      "paths": [
+        "~/.gemini/"
+      ]
+    },
+    "com.google.Chrome": {
+      "name": "Google Chrome",
+      "paths": [
+        "~/Library/Google/",
+        "~/Library/LaunchAgents/com.google.keystone.agent.plist",
+        "~/Library/LaunchAgents/com.google.keystone.xpcservice.plist"
+      ]
+    },
+    "com.microsoft.VSCode": {
+      "name": "Visual Studio Code",
+      "paths": [
+        "~/.vscode/"
+      ]
+    },
+    "com.microsoft.edgemac": {
+      "name": "Microsoft Edge",
+      "paths": [
+        "~/Library/Microsoft/Edge/"
+      ]
+    },
+    "org.mozilla.firefox": {
+      "name": "Firefox",
+      "paths": [
+        "~/.mozilla/"
+      ]
+    },
+    "com.docker.docker": {
+      "name": "Docker Desktop",
+      "paths": [
+        "~/.docker/",
+        "/usr/local/bin/docker",
+        "/usr/local/bin/docker-compose"
+      ]
+    },
+    "com.spotify.client": {
+      "name": "Spotify",
+      "paths": [
+        "~/Library/Spotify/"
+      ]
+    },
+    "com.hnc.Discord": {
+      "name": "Discord",
+      "paths": [
+        "~/Library/Application Support/discord/"
+      ]
+    },
+    "com.tinyspeck.slackmacgap": {
+      "name": "Slack",
+      "paths": [
+        "~/Library/Application Support/Slack/"
+      ]
+    },
+    "us.zoom.xos": {
+      "name": "Zoom",
+      "paths": [
+        "~/.zoomus/"
+      ]
+    },
+    "com.brave.Browser": {
+      "name": "Brave Browser",
+      "paths": [
+        "~/Library/BraveSoftware/"
+      ]
+    },
+    "net.kovidgoyal.calibre": {
+      "name": "Calibre",
+      "paths": [
+        "~/Library/Preferences/calibre/",
+        "~/Calibre Library/"
+      ]
+    },
+    "com.jetbrains.intellij": {
+      "name": "IntelliJ IDEA",
+      "paths": [
+        "~/.idea/"
+      ]
+    }
+  }
+}

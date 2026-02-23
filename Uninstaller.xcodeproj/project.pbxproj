@@ -21,6 +21,8 @@
 		A10012 /* FileListView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10012; };
 		A10013 /* FileRowView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10013; };
 		A10014 /* FullDiskAccessPromptView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10014; };
+		A10015 /* CommunityMappings.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10016; };
+		A10016 /* community_mappings.json in Resources */ = {isa = PBXBuildFile; fileRef = B10017; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -40,6 +42,8 @@
 		B10013 /* FileRowView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FileRowView.swift; sourceTree = "<group>"; };
 		B10014 /* FullDiskAccessPromptView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FullDiskAccessPromptView.swift; sourceTree = "<group>"; };
 		B10015 /* Uninstaller.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = Uninstaller.entitlements; sourceTree = "<group>"; };
+		B10016 /* CommunityMappings.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CommunityMappings.swift; sourceTree = "<group>"; };
+		B10017 /* community_mappings.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = community_mappings.json; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -71,6 +75,7 @@
 				D10003 /* Services */,
 				D10004 /* ViewModels */,
 				D10005 /* Views */,
+				D10007 /* Resources */,
 			);
 			path = Uninstaller;
 			sourceTree = "<group>";
@@ -89,6 +94,7 @@
 			isa = PBXGroup;
 			children = (
 				B10007 /* AppBundleParser.swift */,
+				B10016 /* CommunityMappings.swift */,
 				B10008 /* FileScanner.swift */,
 				B10009 /* TrashService.swift */,
 			);
@@ -121,6 +127,14 @@
 				B10000 /* Uninstaller.app */,
 			);
 			name = Products;
+			sourceTree = "<group>";
+		};
+		D10007 /* Resources */ = {
+			isa = PBXGroup;
+			children = (
+				B10017 /* community_mappings.json */,
+			);
+			path = Resources;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
@@ -182,6 +196,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				A10003 /* Assets.xcassets in Resources */,
+				A10016 /* community_mappings.json in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -205,6 +220,7 @@
 				A10012 /* FileListView.swift in Sources */,
 				A10013 /* FileRowView.swift in Sources */,
 				A10014 /* FullDiskAccessPromptView.swift in Sources */,
+				A10015 /* CommunityMappings.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

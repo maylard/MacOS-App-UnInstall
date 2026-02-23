@@ -2,6 +2,7 @@ import Foundation
 
 class FileScanner {
     private let fileManager = FileManager.default
+    private let communityMappings = CommunityMappings()
 
     func scan(appInfo: AppInfo) async -> [FoundFile] {
         var appInfo = appInfo
@@ -9,6 +10,9 @@ class FileScanner {
         let homeDir = fileManager.homeDirectoryForCurrentUser
         let userLib = homeDir.appendingPathComponent("Library")
         let sysLib = URL(fileURLWithPath: "/Library")
+
+        // Load community mappings (fetches from GitHub, falls back to bundled)
+        await communityMappings.load()
 
         // --- PHASE 1: Scan the app binary for embedded path references ---
         // This catches things like ~/.gemini/ that don't match standard patterns
@@ -166,6 +170,9 @@ class FileScanner {
         // --- PHASE 5: BINARY-DISCOVERED PATHS ---
         checkDiscoveredPaths(discoveredPaths, existingResults: results, into: &results)
 
+        // --- PHASE 6: COMMUNITY MAPPINGS ---
+        checkCommunityMappings(bundleID: appInfo.bundleIdentifier, existingResults: results, into: &results)
+
         // Deduplicate results by URL
         var seen = Set<String>()
         results = results.filter { file in
@@ -220,8 +227,6 @@ class FileScanner {
                     let afterHome = String(normalized.dropFirst(2)) // drop ~/
                     if let firstSlash = afterHome.firstIndex(of: "/") {
                         let dirName = String(afterHome[afterHome.startIndex..<firstSlash])
-                        let fullPath = homeDir + "/." + dirName.replacingOccurrences(of: ".", with: "", options: .anchored)
-                        // Normalize: ensure it starts with .
                         let dotPath = "~/." + dirName.replacingOccurrences(of: ".", with: "", options: .anchored)
                         if !paths.contains(dotPath) {
                             paths.append(dotPath)
@@ -351,6 +356,39 @@ class FileScanner {
                     size: size,
                     isDirectory: isDirectory(url),
                     category: .binaryDiscovered
+                ))
+            }
+        }
+    }
+
+    // MARK: - Community Mappings
+
+    /// Check community-maintained path mappings for this bundle ID
+    private func checkCommunityMappings(bundleID: String,
+                                        existingResults: [FoundFile],
+                                        into results: inout [FoundFile]) {
+        let extraPaths = communityMappings.paths(for: bundleID)
+        let homeDir = fileManager.homeDirectoryForCurrentUser.path
+        let existingPaths = Set(existingResults.map(\.url.path))
+
+        for path in extraPaths {
+            let resolvedPath: String
+            if path.hasPrefix("~/") {
+                resolvedPath = homeDir + String(path.dropFirst(1))
+            } else {
+                resolvedPath = path
+            }
+
+            let url = URL(fileURLWithPath: resolvedPath)
+            guard !existingPaths.contains(url.path) else { continue }
+
+            if fileManager.fileExists(atPath: resolvedPath) {
+                let size = calculateSize(at: url)
+                results.append(FoundFile(
+                    url: url,
+                    size: size,
+                    isDirectory: isDirectory(url),
+                    category: .communityMapped
                 ))
             }
         }
