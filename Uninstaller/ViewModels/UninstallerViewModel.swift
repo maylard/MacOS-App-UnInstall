@@ -13,9 +13,17 @@ class UninstallerViewModel: ObservableObject {
     private let scanner = FileScanner()
 
     func checkFullDiskAccess() {
-        let testPath = FileManager.default.homeDirectoryForCurrentUser
-            .appendingPathComponent("Library/Safari/Bookmarks.plist")
-        hasFullDiskAccess = FileManager.default.isReadableFile(atPath: testPath.path)
+        // The most reliable FDA check: try to list ~/Library/Safari/ contents.
+        // This directory is TCC-protected and listing it requires Full Disk Access.
+        // Note: FDA is only applied when the app launches — if you grant FDA while
+        // the app is running, you must quit and reopen for it to take effect.
+        let safariDir = FileManager.default.homeDirectoryForCurrentUser
+            .appendingPathComponent("Library/Safari")
+        let canList = (try? FileManager.default.contentsOfDirectory(
+            at: safariDir,
+            includingPropertiesForKeys: nil
+        )) != nil
+        hasFullDiskAccess = canList
     }
 
     func handleDrop(providers: [NSItemProvider]) -> Bool {

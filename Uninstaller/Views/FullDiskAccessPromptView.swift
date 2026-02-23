@@ -18,7 +18,7 @@ struct FullDiskAccessPromptView: View {
                         .font(.callout)
                         .foregroundStyle(.secondary)
                 } else {
-                    Text("Full Disk Access is recommended to find all associated files.")
+                    Text("Full Disk Access is recommended. If already enabled, quit and reopen the app.")
                         .font(.callout)
                 }
 
